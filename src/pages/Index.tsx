@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import ListingCard from "@/components/ListingCard";
+import NotificationBell from "@/components/NotificationBell";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 
@@ -35,13 +36,16 @@ const Index = () => {
     <div className="min-h-screen pb-24">
       <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-lg mx-auto px-4 pt-4 pb-3">
-          <motion.h1
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-2xl font-extrabold text-foreground"
-          >
-            Snap<span className="text-primary">Sell</span>
-          </motion.h1>
+          <div className="flex items-center justify-between">
+            <motion.h1
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-2xl font-extrabold text-foreground"
+            >
+              Snap<span className="text-primary">Sell</span>
+            </motion.h1>
+            <NotificationBell />
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             Snap it. List it. Sell it.
           </p>
