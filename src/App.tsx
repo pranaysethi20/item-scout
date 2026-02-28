@@ -12,6 +12,7 @@ import Messages from "./pages/Messages";
 import Chat from "./pages/Chat";
 import Profile from "./pages/Profile";
 import Auth from "./pages/Auth";
+import PitchDeck from "./pages/PitchDeck";
 import NotFound from "./pages/NotFound";
 import BottomNav from "./components/BottomNav";
 
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/chat/:conversationId" element={<Chat />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/pitch" element={<PitchDeck />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <BottomNav />
