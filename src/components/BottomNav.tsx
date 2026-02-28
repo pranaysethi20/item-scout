@@ -1,4 +1,4 @@
-import { Home, Camera, Repeat2, User } from "lucide-react";
+import { Home, Camera, Repeat2, MessageCircle, User } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
@@ -6,12 +6,16 @@ const navItems = [
   { icon: Home, label: "Home", path: "/" },
   { icon: Camera, label: "Sell", path: "/create" },
   { icon: Repeat2, label: "Trade", path: "/trade" },
+  { icon: MessageCircle, label: "Chat", path: "/messages" },
   { icon: User, label: "Profile", path: "/profile" },
 ];
 
 const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Hide nav on chat detail pages
+  if (location.pathname.startsWith("/chat/")) return null;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/80 backdrop-blur-xl border-t border-border">
@@ -22,7 +26,7 @@ const BottomNav = () => {
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className="relative flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-colors"
+              className="relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-colors"
             >
               {isActive && (
                 <motion.div
