@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Maximize, Minimize, Camera, Repeat2, MessageCircle, Shield, TrendingUp, Sparkles, Zap, Users, DollarSign } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize, Minimize, Camera, Repeat2, MessageCircle, Shield, TrendingUp, Sparkles, Zap, Users, DollarSign, Download, Loader2 } from "lucide-react";
+import html2canvas from "html2canvas-pro";
+import jsPDF from "jspdf";
 
 const slides = [
   {
@@ -288,9 +290,45 @@ const slides = [
 const PitchDeck = () => {
   const [current, setCurrent] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const offscreenRef = useRef<HTMLDivElement>(null);
 
   const next = useCallback(() => setCurrent(c => Math.min(c + 1, slides.length - 1)), []);
   const prev = useCallback(() => setCurrent(c => Math.max(c - 1, 0)), []);
+
+  const exportPDF = useCallback(async () => {
+    setExporting(true);
+    try {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "px", format: [1920, 1080] });
+      const container = offscreenRef.current;
+      if (!container) return;
+
+      for (let i = 0; i < slides.length; i++) {
+        if (i > 0) pdf.addPage([1920, 1080], "landscape");
+
+        // Render slide into offscreen container
+        const slideEl = container.querySelector(`[data-slide="${i}"]`) as HTMLElement;
+        if (!slideEl) continue;
+
+        const canvas = await html2canvas(slideEl, {
+          width: 1920,
+          height: 1080,
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+        });
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.92);
+        pdf.addImage(imgData, "JPEG", 0, 0, 1920, 1080);
+      }
+
+      pdf.save("SnapSell-PitchDeck.pdf");
+    } catch (err) {
+      console.error("PDF export failed:", err);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -344,16 +382,31 @@ const PitchDeck = () => {
           </button>
         </div>
 
-        {/* Fullscreen toggle */}
-        <button onClick={() => setIsFullscreen(f => !f)}
-          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-card transition-colors shadow-card">
-          {isFullscreen ? <Minimize className="w-4 h-4 text-foreground" /> : <Maximize className="w-4 h-4 text-foreground" />}
-        </button>
+        {/* Fullscreen toggle & PDF export */}
+        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+          <button onClick={exportPDF} disabled={exporting}
+            className="w-10 h-10 rounded-full bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-card transition-colors shadow-card disabled:opacity-50">
+            {exporting ? <Loader2 className="w-4 h-4 text-foreground animate-spin" /> : <Download className="w-4 h-4 text-foreground" />}
+          </button>
+          <button onClick={() => setIsFullscreen(f => !f)}
+            className="w-10 h-10 rounded-full bg-card/80 backdrop-blur border border-border flex items-center justify-center hover:bg-card transition-colors shadow-card">
+            {isFullscreen ? <Minimize className="w-4 h-4 text-foreground" /> : <Maximize className="w-4 h-4 text-foreground" />}
+          </button>
+        </div>
 
         {/* Slide counter */}
         <div className="absolute top-4 left-4 z-20 px-3 py-1.5 rounded-full bg-card/80 backdrop-blur border border-border text-sm font-semibold text-muted-foreground shadow-card">
           {current + 1} / {slides.length}
         </div>
+      </div>
+
+      {/* Offscreen slides for PDF export */}
+      <div ref={offscreenRef} className="fixed left-[-9999px] top-0" style={{ width: 1920, height: 1080 * slides.length }}>
+        {slides.map((slide, i) => (
+          <div key={i} data-slide={i} style={{ width: 1920, height: 1080, position: "relative", background: "white" }}>
+            {slide.render()}
+          </div>
+        ))}
       </div>
     </div>
   );
