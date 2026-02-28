@@ -1,18 +1,21 @@
 import { Gavel, Repeat2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import type { Listing } from "@/data/mockListings";
 import { motion } from "framer-motion";
+import { formatDistanceToNow } from "date-fns";
 
 interface ListingCardProps {
-  listing: Listing;
+  listing: any;
   index: number;
 }
 
 const ListingCard = ({ listing, index }: ListingCardProps) => {
   const navigate = useNavigate();
-  const highestBid = listing.bids.length
-    ? Math.max(...listing.bids.map((b) => b.amount))
+  const bids = listing.bids || [];
+  const highestBid = bids.length
+    ? Math.max(...bids.map((b: any) => Number(b.amount)))
     : null;
+
+  const timeAgo = formatDistanceToNow(new Date(listing.created_at), { addSuffix: true });
 
   return (
     <motion.div
@@ -24,19 +27,25 @@ const ListingCard = ({ listing, index }: ListingCardProps) => {
     >
       <div className="bg-card rounded-2xl overflow-hidden shadow-card transition-shadow duration-300 group-hover:shadow-card-hover">
         <div className="relative aspect-square overflow-hidden">
-          <img
-            src={listing.image}
-            alt={listing.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
-          />
-          {listing.isAuction && (
+          {listing.image_url ? (
+            <img
+              src={listing.image_url}
+              alt={listing.title}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground text-xs">
+              No image
+            </div>
+          )}
+          {listing.is_auction && (
             <div className="absolute top-2 left-2 gradient-warm text-primary-foreground text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
               <Gavel className="w-3 h-3" />
               Auction
             </div>
           )}
-          {listing.tradeOnly && (
+          {listing.trade_only && (
             <div className="absolute top-2 left-2 gradient-trade text-secondary-foreground text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1">
               <Repeat2 className="w-3 h-3" />
               Trade
@@ -49,15 +58,15 @@ const ListingCard = ({ listing, index }: ListingCardProps) => {
           </h3>
           <div className="flex items-center justify-between mt-1">
             <span className="text-primary font-bold text-base">
-              ${highestBid ?? listing.price}
+              ${highestBid ?? Number(listing.price)}
             </span>
-            {listing.isAuction && listing.bids.length > 0 && (
+            {listing.is_auction && bids.length > 0 && (
               <span className="text-muted-foreground text-xs">
-                {listing.bids.length} bid{listing.bids.length > 1 ? "s" : ""}
+                {bids.length} bid{bids.length > 1 ? "s" : ""}
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">{listing.condition}</p>
+          <p className="text-xs text-muted-foreground mt-1">{listing.condition} · {timeAgo}</p>
         </div>
       </div>
     </motion.div>

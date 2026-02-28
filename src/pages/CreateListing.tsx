@@ -6,11 +6,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 type Step = "upload" | "analyzing" | "review";
 
 const CreateListing = () => {
   const [step, setStep] = useState<Step>("upload");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -18,42 +21,110 @@ const CreateListing = () => {
   const [category, setCategory] = useState("");
   const [condition, setCondition] = useState("");
   const [isAuction, setIsAuction] = useState(false);
+  const [tradeOnly, setTradeOnly] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 gap-4">
+        <p className="text-muted-foreground">Sign in to create a listing</p>
+        <Button onClick={() => navigate("/auth")} className="gradient-warm text-primary-foreground border-0 rounded-xl shadow-float hover:opacity-90">
+          Sign In
+        </Button>
+      </div>
+    );
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-        simulateAI();
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string;
+      setImagePreview(dataUrl);
+      setStep("analyzing");
+
+      try {
+        // Get base64 without the data URL prefix
+        const base64 = dataUrl.split(",")[1];
+        
+        const { data, error } = await supabase.functions.invoke("analyze-item", {
+          body: { imageBase64: base64 },
+        });
+
+        if (error) throw error;
+        if (data.error) throw new Error(data.error);
+
+        setTitle(data.title || "");
+        setDescription(data.description || "");
+        setPrice(String(data.price || ""));
+        setCategory(data.category || "Other");
+        setCondition(data.condition || "Good");
+        setStep("review");
+      } catch (err: any) {
+        console.error("AI analysis error:", err);
+        toast({
+          title: "AI analysis failed",
+          description: "You can still fill in the details manually.",
+          variant: "destructive",
+        });
+        setTitle("");
+        setDescription("");
+        setPrice("");
+        setCategory("Other");
+        setCondition("Good");
+        setStep("review");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePublish = async () => {
+    if (!imageFile || !user) return;
+    setPublishing(true);
+
+    try {
+      // Upload image
+      const fileExt = imageFile.name.split(".").pop();
+      const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("listing-images")
+        .upload(filePath, imageFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("listing-images")
+        .getPublicUrl(filePath);
+
+      // Create listing
+      const { error: insertError } = await supabase.from("listings").insert({
+        user_id: user.id,
+        title,
+        description,
+        price: parseFloat(price) || 0,
+        image_url: publicUrl,
+        category,
+        condition,
+        is_auction: isAuction,
+        trade_only: tradeOnly,
+      });
+
+      if (insertError) throw insertError;
+
+      toast({ title: "🎉 Listing published!", description: "Your item is now live." });
+      navigate("/");
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setPublishing(false);
     }
-  };
-
-  const simulateAI = () => {
-    setStep("analyzing");
-    // Simulated AI analysis
-    setTimeout(() => {
-      setTitle("Vintage Wooden Side Table");
-      setDescription(
-        "Charming mid-century side table in solid oak. Shows beautiful patina from decades of use. Sturdy construction with tapered legs. Measures approximately 20\" x 16\" x 22\". A few surface scratches but structurally sound."
-      );
-      setPrice("85");
-      setCategory("Furniture");
-      setCondition("Good");
-      setStep("review");
-    }, 2500);
-  };
-
-  const handlePublish = () => {
-    toast({
-      title: "🎉 Listing published!",
-      description: "Your item is now live on SnapSell.",
-    });
-    navigate("/");
   };
 
   return (
@@ -64,7 +135,7 @@ const CreateListing = () => {
           AI Listing Creator
         </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Snap a photo, we'll do the rest
+          Snap a photo, AI does the rest
         </p>
 
         <AnimatePresence mode="wait">
@@ -82,11 +153,9 @@ const CreateListing = () => {
                     <Camera className="w-8 h-8 text-primary-foreground" />
                   </div>
                   <div className="text-center">
-                    <p className="font-semibold text-foreground">
-                      Take a photo or upload
-                    </p>
+                    <p className="font-semibold text-foreground">Take a photo or upload</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Our AI will identify the item & create your listing
+                      Our AI will identify & price your item
                     </p>
                   </div>
                 </div>
@@ -169,16 +238,30 @@ const CreateListing = () => {
                   <Input value={category} onChange={(e) => setCategory(e.target.value)} className="bg-card border-border rounded-xl" />
                 </div>
 
+                {/* Toggles */}
                 <div className="flex items-center justify-between bg-card rounded-xl p-3 border border-border">
                   <div>
                     <p className="text-sm font-semibold text-card-foreground">Enable Auction</p>
                     <p className="text-xs text-muted-foreground">Let buyers bid on your item</p>
                   </div>
                   <button
-                    onClick={() => setIsAuction(!isAuction)}
+                    onClick={() => { setIsAuction(!isAuction); if (!isAuction) setTradeOnly(false); }}
                     className={`w-12 h-7 rounded-full transition-colors relative ${isAuction ? "gradient-warm" : "bg-muted"}`}
                   >
                     <div className={`absolute top-1 w-5 h-5 bg-card rounded-full shadow transition-transform ${isAuction ? "left-6" : "left-1"}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-card rounded-xl p-3 border border-border">
+                  <div>
+                    <p className="text-sm font-semibold text-card-foreground">Trade Only</p>
+                    <p className="text-xs text-muted-foreground">Open for trades, no cash</p>
+                  </div>
+                  <button
+                    onClick={() => { setTradeOnly(!tradeOnly); if (!tradeOnly) setIsAuction(false); }}
+                    className={`w-12 h-7 rounded-full transition-colors relative ${tradeOnly ? "gradient-trade" : "bg-muted"}`}
+                  >
+                    <div className={`absolute top-1 w-5 h-5 bg-card rounded-full shadow transition-transform ${tradeOnly ? "left-6" : "left-1"}`} />
                   </button>
                 </div>
               </div>
@@ -186,16 +269,18 @@ const CreateListing = () => {
               <div className="flex gap-3 pt-2">
                 <Button
                   variant="outline"
-                  onClick={() => { setStep("upload"); setImagePreview(null); }}
+                  onClick={() => { setStep("upload"); setImagePreview(null); setImageFile(null); }}
                   className="flex-1 rounded-xl border-border"
                 >
                   <Edit3 className="w-4 h-4 mr-2" /> Retake
                 </Button>
                 <Button
                   onClick={handlePublish}
+                  disabled={publishing || !title}
                   className="flex-1 rounded-xl gradient-warm text-primary-foreground border-0 shadow-float hover:opacity-90"
                 >
-                  <Check className="w-4 h-4 mr-2" /> Publish
+                  {publishing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                  {publishing ? "Publishing..." : "Publish"}
                 </Button>
               </div>
             </motion.div>

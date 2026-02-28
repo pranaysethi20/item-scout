@@ -1,36 +1,92 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { X, Heart, RotateCcw, Repeat2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import SwipeCard from "@/components/SwipeCard";
-import { mockListings } from "@/data/mockListings";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-
-const tradeItems = mockListings.filter((l) => l.tradeOnly || l.price < 100);
+import { useNavigate } from "react-router-dom";
 
 const TradeSwipe = () => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [matches, setMatches] = useState<string[]>([]);
+  const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const { data: listings = [], isLoading } = useQuery({
+    queryKey: ["trade-listings", user?.id],
+    queryFn: async () => {
+      // Get listings that the user hasn't swiped on yet, excluding own
+      let query = supabase
+        .from("listings")
+        .select("*, profiles!listings_user_id_fkey(display_name)")
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (user) {
+        query = query.neq("user_id", user.id);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      if (!user) return data || [];
+
+      // Filter out already swiped
+      const { data: swipes } = await supabase
+        .from("trade_matches")
+        .select("listing_id")
+        .eq("user_id", user.id);
+
+      const swipedIds = new Set((swipes || []).map((s) => s.listing_id));
+      return (data || []).filter((l) => !swipedIds.has(l.id));
+    },
+  });
 
   const handleSwipe = useCallback(
-    (direction: "left" | "right") => {
-      const item = tradeItems[currentIndex];
-      if (direction === "right") {
-        // Simulate ~30% match chance
-        if (Math.random() > 0.6) {
-          setMatches((prev) => [...prev, item.id]);
+    async (direction: "left" | "right") => {
+      if (!user) { navigate("/auth"); return; }
+      const item = listings[currentIndex];
+      if (!item) return;
+
+      try {
+        const { error } = await supabase.from("trade_matches").insert({
+          user_id: user.id,
+          listing_id: item.id,
+          direction,
+          matched: false,
+        });
+        if (error) throw error;
+
+        if (direction === "right") {
           toast({
-            title: "🎉 It's a match!",
-            description: `You matched with ${item.seller} for "${item.title}"`,
+            title: "👍 Trade interest sent!",
+            description: `You're interested in "${item.title}"`,
           });
         }
+      } catch (err: any) {
+        console.error(err);
       }
+
       setCurrentIndex((prev) => prev + 1);
     },
-    [currentIndex, toast]
+    [currentIndex, listings, user, toast, navigate]
   );
 
-  const remaining = tradeItems.slice(currentIndex);
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 gap-4">
+        <p className="text-muted-foreground">Sign in to start trading</p>
+        <button onClick={() => navigate("/auth")} className="gradient-trade text-secondary-foreground px-6 py-3 rounded-xl font-bold shadow-float">
+          Sign In
+        </button>
+      </div>
+    );
+  }
+
+  const remaining = listings.slice(currentIndex);
   const visibleCards = remaining.slice(0, 2);
 
   return (
@@ -43,24 +99,15 @@ const TradeSwipe = () => {
         <p className="text-xs text-muted-foreground mt-0.5">
           Swipe right to offer a trade, left to skip
         </p>
-
-        {matches.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            className="mt-3 bg-secondary/10 rounded-xl p-3 flex items-center gap-2"
-          >
-            <Heart className="w-4 h-4 text-secondary" />
-            <span className="text-sm font-medium text-secondary">
-              {matches.length} match{matches.length > 1 ? "es" : ""}!
-            </span>
-          </motion.div>
-        )}
       </div>
 
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="relative w-full max-w-sm aspect-[3/4]">
-          {visibleCards.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="w-8 h-8 border-4 border-secondary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : visibleCards.length > 0 ? (
             <AnimatePresence>
               {visibleCards
                 .slice()
@@ -86,17 +133,16 @@ const TradeSwipe = () => {
               <p className="font-semibold text-foreground">No more items to swipe</p>
               <p className="text-sm text-muted-foreground mt-1">Check back later for new trades</p>
               <button
-                onClick={() => setCurrentIndex(0)}
+                onClick={() => { setCurrentIndex(0); queryClient.invalidateQueries({ queryKey: ["trade-listings"] }); }}
                 className="mt-4 flex items-center gap-2 text-sm text-primary font-semibold"
               >
-                <RotateCcw className="w-4 h-4" /> Start Over
+                <RotateCcw className="w-4 h-4" /> Refresh
               </button>
             </motion.div>
           )}
         </div>
       </div>
 
-      {/* Action Buttons */}
       {visibleCards.length > 0 && (
         <div className="flex items-center justify-center gap-6 pb-4">
           <button

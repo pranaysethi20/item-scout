@@ -1,17 +1,31 @@
 import { Search } from "lucide-react";
 import { useState } from "react";
-import { mockListings } from "@/data/mockListings";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import ListingCard from "@/components/ListingCard";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 
-const categories = ["All", "Furniture", "Electronics", "Clothing", "Kitchen", "Sports"];
+const categories = ["All", "Furniture", "Electronics", "Clothing", "Kitchen", "Sports", "Other"];
 
 const Index = () => {
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
 
-  const filtered = mockListings.filter((l) => {
+  const { data: listings = [], isLoading } = useQuery({
+    queryKey: ["listings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("listings")
+        .select(`*, profiles!listings_user_id_fkey(display_name, avatar_url), bids(id, amount, user_id, created_at)`)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const filtered = listings.filter((l) => {
     const matchesCategory = activeCategory === "All" || l.category === activeCategory;
     const matchesSearch = l.title.toLowerCase().includes(search.toLowerCase());
     return matchesCategory && matchesSearch;
@@ -19,7 +33,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen pb-24">
-      {/* Header */}
       <div className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-lg mx-auto px-4 pt-4 pb-3">
           <motion.h1
@@ -41,7 +54,6 @@ const Index = () => {
               className="pl-9 bg-muted border-0 rounded-xl h-10 text-sm"
             />
           </div>
-          {/* Categories */}
           <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-hide">
             {categories.map((cat) => (
               <button
@@ -60,17 +72,30 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Listings Grid */}
       <div className="max-w-lg mx-auto px-4 mt-4">
-        <div className="grid grid-cols-2 gap-3">
-          {filtered.map((listing, i) => (
-            <ListingCard key={listing.id} listing={listing} index={i} />
-          ))}
-        </div>
-        {filtered.length === 0 && (
+        {isLoading ? (
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="bg-card rounded-2xl overflow-hidden shadow-card animate-pulse">
+                <div className="aspect-square bg-muted" />
+                <div className="p-3 space-y-2">
+                  <div className="h-4 bg-muted rounded w-3/4" />
+                  <div className="h-5 bg-muted rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {filtered.map((listing, i) => (
+              <ListingCard key={listing.id} listing={listing} index={i} />
+            ))}
+          </div>
+        )}
+        {!isLoading && filtered.length === 0 && (
           <div className="text-center py-20 text-muted-foreground">
-            <p className="text-lg font-semibold">No items found</p>
-            <p className="text-sm mt-1">Try a different search or category</p>
+            <p className="text-lg font-semibold">No items yet</p>
+            <p className="text-sm mt-1">Be the first to list something!</p>
           </div>
         )}
       </div>
