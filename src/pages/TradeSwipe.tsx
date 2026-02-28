@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { X, Heart, RotateCcw, Repeat2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import SwipeCard from "@/components/SwipeCard";
+import MatchCelebration from "@/components/MatchCelebration";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -14,11 +15,11 @@ const TradeSwipe = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [matchedListing, setMatchedListing] = useState<any>(null);
 
   const { data: listings = [], isLoading } = useQuery({
     queryKey: ["trade-listings", user?.id],
     queryFn: async () => {
-      // Get listings that the user hasn't swiped on yet, excluding own
       let query = supabase
         .from("listings")
         .select("*, profiles!listings_user_id_fkey(display_name)")
@@ -34,7 +35,6 @@ const TradeSwipe = () => {
 
       if (!user) return data || [];
 
-      // Filter out already swiped
       const { data: swipes } = await supabase
         .from("trade_matches")
         .select("listing_id")
@@ -52,15 +52,19 @@ const TradeSwipe = () => {
       if (!item) return;
 
       try {
-        const { error } = await supabase.from("trade_matches").insert({
+        const { data, error } = await supabase.from("trade_matches").insert({
           user_id: user.id,
           listing_id: item.id,
           direction,
           matched: false,
-        });
+        }).select("matched").single();
+
         if (error) throw error;
 
-        if (direction === "right") {
+        if (data?.matched) {
+          // It's a match! Show celebration
+          setMatchedListing(item);
+        } else if (direction === "right") {
           toast({
             title: "👍 Trade interest sent!",
             description: `You're interested in "${item.title}"`,
@@ -159,6 +163,16 @@ const TradeSwipe = () => {
           </button>
         </div>
       )}
+
+      {/* Match Celebration Modal */}
+      <AnimatePresence>
+        {matchedListing && (
+          <MatchCelebration
+            listing={matchedListing}
+            onClose={() => setMatchedListing(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
