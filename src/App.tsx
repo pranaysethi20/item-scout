@@ -8,6 +8,8 @@ import Index from "./pages/Index";
 import CreateListing from "./pages/CreateListing";
 import ListingDetail from "./pages/ListingDetail";
 import TradeSwipe from "./pages/TradeSwipe";
+import Messages from "./pages/Messages";
+import Chat from "./pages/Chat";
 import Profile from "./pages/Profile";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -27,6 +29,8 @@ const App = () => (
             <Route path="/create" element={<CreateListing />} />
             <Route path="/listing/:id" element={<ListingDetail />} />
             <Route path="/trade" element={<TradeSwipe />} />
+            <Route path="/messages" element={<Messages />} />
+            <Route path="/chat/:conversationId" element={<Chat />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="*" element={<NotFound />} />

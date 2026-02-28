@@ -19,6 +19,48 @@ const ListingDetail = () => {
   const [bidAmount, setBidAmount] = useState("");
   const [liked, setLiked] = useState(false);
   const [bidding, setBidding] = useState(false);
+  const [messaging, setMessaging] = useState(false);
+
+  const handleMessage = async () => {
+    if (!user) { navigate("/auth"); return; }
+    if (user.id === listing?.user_id) {
+      toast({ title: "That's your listing!", variant: "destructive" });
+      return;
+    }
+    setMessaging(true);
+    try {
+      // Check for existing conversation
+      const { data: existing } = await supabase
+        .from("conversations")
+        .select("id")
+        .eq("listing_id", listing!.id)
+        .eq("buyer_id", user.id)
+        .maybeSingle();
+
+      if (existing) {
+        navigate(`/chat/${existing.id}`);
+        return;
+      }
+
+      // Create new conversation
+      const { data: newConv, error } = await supabase
+        .from("conversations")
+        .insert({
+          listing_id: listing!.id,
+          buyer_id: user.id,
+          seller_id: listing!.user_id,
+        })
+        .select("id")
+        .single();
+
+      if (error) throw error;
+      navigate(`/chat/${newConv.id}`);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setMessaging(false);
+    }
+  };
 
   const { data: listing, isLoading } = useQuery({
     queryKey: ["listing", id],
@@ -135,8 +177,8 @@ const ListingDetail = () => {
                 <p className="text-sm font-semibold text-card-foreground">{profile.display_name}</p>
                 <p className="text-xs text-muted-foreground">Seller</p>
               </div>
-              <Button variant="outline" size="sm" className="ml-auto rounded-xl text-xs">
-                <MessageCircle className="w-3.5 h-3.5 mr-1" /> Message
+              <Button variant="outline" size="sm" className="ml-auto rounded-xl text-xs" onClick={handleMessage} disabled={messaging}>
+                <MessageCircle className="w-3.5 h-3.5 mr-1" /> {messaging ? "..." : "Message"}
               </Button>
             </div>
           )}
